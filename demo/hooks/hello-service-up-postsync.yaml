@@ -1,26 +1,42 @@
-# ArgoCD PostSync resource hook.
+# ArgoCD PostSync resource hook — GATING.
 #
-# When the helm-guestbook Application syncs (deploy or update), ArgoCD applies
-# this resource. Creating/updating a TestWorkflowExecution makes Testkube run
-# the referenced TestWorkflow (hello-service-up), which curls the guestbook
-# Service and verifies it returns HTTP 200.
+# When helm-guestbook syncs (deploy or update), ArgoCD applies this Job and
+# WAITS for it: ArgoCD natively tracks Job health, so if the Job fails the
+# PostSync hook fails and the whole sync is marked Failed. The Job runs the
+# hello-service-up workflow with `-f`, which streams logs and exits non-zero if
+# the test fails — so a down/unhealthy guestbook Service fails the deploy.
 #
-# hook-delete-policy: BeforeHookCreation deletes the previous execution object
-# before the next sync recreates it, so the smoke test re-runs on every sync.
+# generateName -> a fresh, uniquely-named Job per sync (re-runs every time).
+# hook-delete-policy: HookSucceeded -> successful runs are cleaned up; FAILED
+# runs are kept so you can inspect their logs.
 #
-# NOTE: this is fire-and-forget. ArgoCD has no health check for a
-# TestWorkflowExecution, so it reports the hook Healthy immediately and the
-# sync does NOT wait for or fail on the test result. If you want the deploy to
-# fail when the service is down, use the Job variant instead
-# (../hello-service-up-postsync.job.yaml).
-apiVersion: testworkflows.testkube.io/v1
-kind: TestWorkflowExecution
+# This assumes a self-hosted (OSS / standalone agent) Testkube reachable
+# in-cluster at the API server Service. Adjust TESTKUBE_API_URI to match your
+# install (service name / namespace / port). For Testkube Cloud, replace the
+# TESTKUBE_API_URI env with a `testkube set context --api-key ... --org-id ...
+# --env-id ...` call before the run command.
+apiVersion: batch/v1
+kind: Job
 metadata:
-  name: hello-service-up-postsync
+  generateName: hello-service-up-postsync-
   namespace: testkube
   annotations:
     argocd.argoproj.io/hook: PostSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
 spec:
-  testWorkflow:
-    name: hello-service-up
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: run-hello-service-up
+          image: kubeshop/testkube-cli:2.1.19
+          env:
+            - name: TESTKUBE_API_URI
+              value: http://testkube-api-server.testkube.svc.cluster.local:8088
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              testkube run testworkflow hello-service-up -f

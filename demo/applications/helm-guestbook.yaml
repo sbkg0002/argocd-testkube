@@ -1,0 +1,32 @@
+# The helm-guestbook app, plus its PostSync smoke-test hook.
+#
+# sync-wave "1": syncs after testkube-workflows (wave "0") is Healthy, so the
+# `hello-service-up` TestWorkflow already exists when the hook executes it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: helm-guestbook
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  # Multi-source: the upstream chart we cannot modify, plus our PostSync hook.
+  # The hook lives in the app's manifest set, so it runs on every sync of this
+  # Application. Point the second repoURL at wherever you push THIS repo.
+  sources:
+    - repoURL: https://github.com/argoproj/argocd-example-apps.git
+      targetRevision: HEAD
+      path: helm-guestbook
+    - repoURL: https://github.com/sbkg0002/argocd-testkube.git
+      targetRevision: HEAD
+      path: demo/hooks
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

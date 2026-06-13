@@ -1,0 +1,18 @@
+# ALTERNATIVE (non-gating) PostSync hook — kept here for reference, NOT synced.
+#
+# This declarative TestWorkflowExecution triggers the workflow with no CLI or
+# API token, but it is fire-and-forget: ArgoCD has no health check for this
+# CRD, so the sync does NOT wait for or fail on the result. The active,
+# gating hook is hooks/hello-service-up-postsync.yaml (a Job). Swap this in only
+# if you don't need the deploy to fail when the test fails.
+apiVersion: testworkflows.testkube.io/v1
+kind: TestWorkflowExecution
+metadata:
+  name: hello-service-up-postsync
+  namespace: testkube
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  testWorkflow:
+    name: hello-service-up

@@ -69,41 +69,66 @@ testkube create testworkflowexecution \
   --config fqdn=app.example.com
 ```
 
-## Run on deploy: ArgoCD PostSync hook
+## Run on deploy: everything via ArgoCD
 
-`demo/` wires the `hello-service-up` workflow to the `helm-guestbook` ArgoCD
-Application as a [resource hook](https://argo-cd.readthedocs.io/en/stable/user-guide/resource_hooks/),
-so the smoke test fires every time the app is deployed or updated.
+`demo/` runs the whole thing through ArgoCD with an **app-of-apps** — the
+TestWorkflow definitions *and* the `helm-guestbook` deploy *and* the smoke-test
+[resource hook](https://argo-cd.readthedocs.io/en/stable/user-guide/resource_hooks/)
+are all GitOps-managed. The test fires every time `helm-guestbook` is deployed
+or updated.
 
-| File                                       | Purpose                                                                 |
-|--------------------------------------------|-------------------------------------------------------------------------|
-| `demo/application.yaml`                    | The `helm-guestbook` Application, with a second source for the hook     |
-| `demo/hooks/hello-service-up-postsync.yaml`| `TestWorkflowExecution` PostSync hook — triggers the workflow (default)  |
-| `demo/hello-service-up-postsync.job.yaml`  | Optional Job variant that **fails the sync** if the test fails          |
+| File                                          | Purpose                                                                  |
+|-----------------------------------------------|--------------------------------------------------------------------------|
+| `demo/root-app.yaml`                          | Root app-of-apps — the single thing you apply by hand to bootstrap       |
+| `demo/applications/testkube-workflows.yaml`   | App that installs the TestWorkflow definitions (`workflows/`), wave 0    |
+| `demo/applications/helm-guestbook.yaml`       | App for `helm-guestbook` + the PostSync hook, wave 1                     |
+| `demo/hooks/hello-service-up-postsync.yaml`   | PostSync **Job** hook — runs the workflow and **fails the sync** if it fails |
+| `demo/hello-service-up-postsync.exec.yaml`    | Non-gating `TestWorkflowExecution` alternative (reference, not synced)    |
 
 How it works:
 
+- The root app deploys the two child Applications. `argocd.argoproj.io/sync-wave`
+  orders them: `testkube-workflows` (wave 0) becomes Healthy before
+  `helm-guestbook` (wave 1) syncs, so `hello-service-up` already exists when the
+  hook runs it.
 - An ArgoCD hook is just a resource carrying `argocd.argoproj.io/hook: PostSync`
-  that lives in the Application's manifest set. ArgoCD applies it after the app's
-  own resources are healthy.
-- The upstream `helm-guestbook` chart can't be edited, so the hook is attached
-  via a **second source** on the Application. Set that source's `repoURL` to
-  wherever you push this repo (and make sure ArgoCD can read it).
-- Creating/updating a `TestWorkflowExecution` makes Testkube run the workflow.
-  `hook-delete-policy: BeforeHookCreation` deletes the prior execution object
-  before each sync recreates it, so the test re-runs on every sync.
+  that lives in the Application's manifest set, applied after the app's own
+  resources are healthy. The upstream `helm-guestbook` chart can't be edited, so
+  the hook is attached via a **second source** on that Application.
+- The hook is a **Job** that runs `testkube run testworkflow hello-service-up -f`.
+  ArgoCD natively tracks Job health and waits for it, so a non-zero exit (failed
+  test) fails the PostSync hook and marks the whole **sync Failed**.
+  `generateName` gives a fresh run per sync; `hook-delete-policy: HookSucceeded`
+  cleans up passing runs and keeps failed ones for inspection.
 
-Apply:
+Bootstrap (one command — everything else is reconciled by ArgoCD):
 
 ```sh
-kubectl apply -f demo/application.yaml
+kubectl apply -f demo/root-app.yaml
 ```
 
-### Gating the deploy on the test result
+> The Applications point at `https://github.com/sbkg0002/argocd-testkube.git`
+> (repo root = this directory). Testkube itself (CRDs + controllers) must already
+> be installed in the cluster.
 
-The `TestWorkflowExecution` hook is fire-and-forget: ArgoCD has no health check
-for it, so the sync doesn't wait for or fail on the result. If you want a failed
-smoke test to mark the deploy failed, use `demo/hello-service-up-postsync.job.yaml`
-instead — ArgoCD waits on Jobs natively and `testkube run ... -f` exits non-zero
-on failure. Point the second source's `path` at the directory holding that Job
-(or move it into `hooks/` and remove the `TestWorkflowExecution`).
+### Talking to Testkube from the hook Job
+
+The Job uses the `kubeshop/testkube-cli` image and reaches the self-hosted
+Testkube API server in-cluster:
+
+```yaml
+env:
+  - name: TESTKUBE_API_URI
+    value: http://testkube-api-server.testkube.svc.cluster.local:8088
+```
+
+Adjust the service name / namespace / port to match your install if you changed
+the Helm release name or namespace.
+
+### Don't want the deploy to fail on a failed test?
+
+Use the non-gating `demo/hello-service-up-postsync.exec.yaml` instead — a
+declarative `TestWorkflowExecution` that triggers the workflow with no CLI or
+token, but is fire-and-forget (ArgoCD has no health check for that CRD, so the
+sync won't wait for or fail on the result). Move it into `hooks/` and remove the
+Job.

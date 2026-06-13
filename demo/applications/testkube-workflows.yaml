@@ -1,0 +1,27 @@
+# Manages the Testkube TestWorkflow definitions as ordinary, ArgoCD-managed
+# resources in the `testkube` namespace. This replaces the manual
+# `kubectl apply -f workflows/` step — the workflows are now GitOps-managed.
+#
+# sync-wave "0" makes this Application sync (and become Healthy) before the
+# helm-guestbook app in wave "1", so `hello-service-up` already exists when the
+# PostSync hook tries to execute it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+    name: testkube-workflows
+    namespace: argocd
+    annotations:
+        argocd.argoproj.io/sync-wave: "0"
+spec:
+    project: default
+    source:
+        repoURL: https://github.com/sbkg0002/argocd-testkube.git
+        targetRevision: HEAD
+        path: workflows
+    destination:
+        server: https://kubernetes.default.svc
+        namespace: testkube
+    syncPolicy:
+        automated:
+            prune: true
+            selfHeal: true

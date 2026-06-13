@@ -1,0 +1,27 @@
+# Root "app of apps". Apply this ONCE to bootstrap the whole demo via ArgoCD:
+#
+#   kubectl apply -f testkube/demo/root-app.yaml
+#
+# It deploys every Application under testkube/demo/applications/:
+#   - testkube-workflows  (wave 0): installs the TestWorkflow definitions
+#   - helm-guestbook      (wave 1): the app + PostSync hook that runs the test
+#
+# From here everything else is reconciled by ArgoCD — no manual kubectl apply.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: testkube-guestbook-demo
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/sbkg0002/argocd-testkube.git
+    targetRevision: HEAD
+    path: demo/applications
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
