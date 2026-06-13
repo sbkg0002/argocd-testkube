@@ -14,7 +14,7 @@ spec:
           path: helm-guestbook
         - repoURL: https://github.com/sbkg0002/argocd-testkube.git
           targetRevision: HEAD
-          path: testkube/demo/hooks
+          path: demo/hooks
     destination:
         server: https://kubernetes.default.svc
         namespace: demo
