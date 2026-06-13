@@ -32,6 +32,10 @@ spec:
         - name: run-hello-service-up
           image: kubeshop/testkube-cli:2.1.19
           env:
+            # `direct` talks to the API server over HTTP via TESTKUBE_API_URI.
+            # Without it the CLI defaults to the `proxy` client, which needs a
+            # kubeconfig the hook pod doesn't have ("no configuration has been
+            # provided ... KUBERNETES_MASTER").
             - name: TESTKUBE_API_URI
               value: http://testkube-api-server.testkube.svc.cluster.local:8088
           command:
@@ -39,4 +43,4 @@ spec:
             - -c
             - |
               set -e
-              testkube run testworkflow hello-service-up -f
+              testkube --client direct run testworkflow hello-service-up -f
