@@ -30,7 +30,9 @@ spec:
       restartPolicy: Never
       containers:
         - name: run-hello-service-up
-          image: kubeshop/testkube-cli:2.1.19
+          # Pinned to match the installed testkube-api-server version. An older
+          # CLI panics in its `-f` log-watcher against a newer API.
+          image: kubeshop/testkube-cli:2.10.1
           env:
             # `direct` talks to the API server over HTTP via TESTKUBE_API_URI.
             # Without it the CLI defaults to the `proxy` client, which needs a
