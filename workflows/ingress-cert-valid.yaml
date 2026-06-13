@@ -1,0 +1,84 @@
+apiVersion: testworkflows.testkube.io/v1
+kind: TestWorkflow
+metadata:
+  name: ingress-cert-valid
+  namespace: testkube
+  labels:
+    app: ingress-health
+    check: certificate
+spec:
+  # The FQDN whose TLS certificate is validated. Override with:
+  #   testkube run testworkflow ingress-cert-valid --config fqdn=app.example.com
+  config:
+    fqdn:
+      type: string
+      default: "example.com"
+    port:
+      type: integer
+      default: 443
+    # Fail if the certificate expires within this many days.
+    minDaysValid:
+      type: integer
+      default: 14
+    timeout:
+      type: integer
+      default: 10
+
+  container:
+    # alpine/openssl ships openssl + the ca-certificates trust store.
+    image: alpine/openssl:3.3.1
+
+  steps:
+    - name: Validate ingress TLS certificate
+      shell: |
+        set -eu
+
+        HOST="{{ config.fqdn }}"
+        PORT="{{ config.port }}"
+        MIN_DAYS="{{ config.minDaysValid }}"
+
+        echo "==> Fetching certificate from ${HOST}:${PORT}"
+
+        # Grab the leaf certificate, sending SNI so the ingress returns the right cert.
+        CERT=$(echo | openssl s_client \
+          -connect "${HOST}:${PORT}" \
+          -servername "${HOST}" \
+          -verify_return_error 2>/tmp/sclient.err \
+          | openssl x509 2>/dev/null) || true
+
+        if [ -z "${CERT}" ]; then
+          echo "FAIL: could not retrieve a certificate from ${HOST}:${PORT}"
+          echo "----- openssl s_client error -----"
+          cat /tmp/sclient.err
+          exit 1
+        fi
+
+        # 1) Trust-chain verification (-verify_return_error makes s_client exit non-zero
+        #    on a bad chain; double-check the verify line for clarity in the logs).
+        VERIFY_LINE=$(grep -i 'verify return code' /tmp/sclient.err || true)
+        echo "==> ${VERIFY_LINE:-verify return code: (not reported)}"
+        if [ -n "${VERIFY_LINE}" ] && echo "${VERIFY_LINE}" | grep -qiv 'verify return code: 0'; then
+          echo "FAIL: certificate chain did not verify against the trust store"
+          exit 1
+        fi
+
+        # 2) Hostname match.
+        if echo "${CERT}" | openssl x509 -noout -checkhost "${HOST}" >/dev/null 2>&1; then
+          echo "==> Hostname ${HOST} matches the certificate"
+        else
+          echo "FAIL: ${HOST} does not match the certificate's CN/SAN"
+          echo "${CERT}" | openssl x509 -noout -subject -ext subjectAltName
+          exit 1
+        fi
+
+        # 3) Expiry window.
+        NOT_AFTER=$(echo "${CERT}" | openssl x509 -noout -enddate | cut -d= -f2)
+        echo "==> Certificate notAfter: ${NOT_AFTER}"
+
+        if echo "${CERT}" | openssl x509 -noout -checkend $(( MIN_DAYS * 86400 )) >/dev/null 2>&1; then
+          echo "PASS: certificate for ${HOST} is valid and not expiring within ${MIN_DAYS} days"
+          exit 0
+        else
+          echo "FAIL: certificate for ${HOST} expires within ${MIN_DAYS} days (or is already expired)"
+          exit 1
+        fi

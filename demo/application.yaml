@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+    name: helm-guestbook
+    namespace: argocd
+spec:
+    project: default
+    # Multi-source: the upstream chart we cannot modify, plus our PostSync hook.
+    # The hook lives in the app's manifest set, so it runs on every sync of this
+    # Application. Point the second repoURL at wherever you push THIS repo.
+    sources:
+        - repoURL: https://github.com/argoproj/argocd-example-apps.git
+          targetRevision: HEAD
+          path: helm-guestbook
+        - repoURL: https://github.com/sbkg0002/argocd-testkube.git
+          targetRevision: HEAD
+          path: testkube/demo/hooks
+    destination:
+        server: https://kubernetes.default.svc
+        namespace: demo
+    syncPolicy:
+        automated:
+            prune: true
+            selfHeal: true
+        syncOptions:
+            - CreateNamespace=true

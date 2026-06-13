@@ -1,0 +1,10 @@
+apiVersion: testworkflows.testkube.io/v1
+kind: TestWorkflow
+metadata:
+    name: curl-example-1
+spec:
+    steps:
+        - run:
+              image: "curlimages/curl:7.78.0"
+              args:
+                  - "https://testkube.io"

@@ -1,0 +1,58 @@
+apiVersion: testworkflows.testkube.io/v1
+kind: TestWorkflow
+metadata:
+  name: ingress-reachable
+  namespace: testkube
+  labels:
+    app: ingress-health
+    check: reachability
+spec:
+  # The FQDN to test. Override at run time with:
+  #   testkube run testworkflow ingress-reachable --config fqdn=app.example.com
+  config:
+    fqdn:
+      type: string
+      default: "example.com"
+    scheme:
+      type: string
+      default: "https"
+    # Expected HTTP status code(s), space separated.
+    expectedStatus:
+      type: string
+      default: "200 201 204 301 302 401 403"
+    timeout:
+      type: integer
+      default: 10
+
+  container:
+    image: curlimages/curl:8.8.0
+
+  steps:
+    - name: Check ingress FQDN is reachable
+      shell: |
+        set -eu
+
+        URL="{{ config.scheme }}://{{ config.fqdn }}"
+        echo "==> Requesting ${URL}"
+
+        # -s silent, -S show errors, -o discard body, write only the status code.
+        STATUS=$(curl -sS -o /dev/null \
+          --connect-timeout {{ config.timeout }} \
+          --max-time {{ config.timeout }} \
+          -w '%{http_code}' \
+          "${URL}") || {
+            echo "FAIL: could not connect to ${URL}"
+            exit 1
+          }
+
+        echo "==> Got HTTP status: ${STATUS}"
+
+        for code in {{ config.expectedStatus }}; do
+          if [ "${STATUS}" = "${code}" ]; then
+            echo "PASS: ${URL} reachable (HTTP ${STATUS})"
+            exit 0
+          fi
+        done
+
+        echo "FAIL: HTTP ${STATUS} not in expected set [{{ config.expectedStatus }}]"
+        exit 1

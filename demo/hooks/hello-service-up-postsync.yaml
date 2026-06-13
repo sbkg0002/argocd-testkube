@@ -1,0 +1,26 @@
+# ArgoCD PostSync resource hook.
+#
+# When the helm-guestbook Application syncs (deploy or update), ArgoCD applies
+# this resource. Creating/updating a TestWorkflowExecution makes Testkube run
+# the referenced TestWorkflow (hello-service-up), which curls the guestbook
+# Service and verifies it returns HTTP 200.
+#
+# hook-delete-policy: BeforeHookCreation deletes the previous execution object
+# before the next sync recreates it, so the smoke test re-runs on every sync.
+#
+# NOTE: this is fire-and-forget. ArgoCD has no health check for a
+# TestWorkflowExecution, so it reports the hook Healthy immediately and the
+# sync does NOT wait for or fail on the test result. If you want the deploy to
+# fail when the service is down, use the Job variant instead
+# (../hello-service-up-postsync.job.yaml).
+apiVersion: testworkflows.testkube.io/v1
+kind: TestWorkflowExecution
+metadata:
+  name: hello-service-up-postsync
+  namespace: testkube
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  testWorkflow:
+    name: hello-service-up

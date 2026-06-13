@@ -1,0 +1,33 @@
+apiVersion: testworkflows.testkube.io/v1
+kind: TestWorkflow
+metadata:
+  name: ingress-health-suite
+  namespace: testkube
+  labels:
+    app: ingress-health
+    check: suite
+spec:
+  # Runs both checks for a given ingress FQDN in one go:
+  #   testkube run testworkflow ingress-health-suite --config fqdn=app.example.com
+  config:
+    fqdn:
+      type: string
+      default: "example.com"
+    minDaysValid:
+      type: integer
+      default: 14
+
+  steps:
+    - name: Reachability
+      execute:
+        workflows:
+          - name: ingress-reachable
+            config:
+              fqdn: "{{ config.fqdn }}"
+    - name: Certificate
+      execute:
+        workflows:
+          - name: ingress-cert-valid
+            config:
+              fqdn: "{{ config.fqdn }}"
+              minDaysValid: "{{ config.minDaysValid }}"

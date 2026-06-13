@@ -1,0 +1,44 @@
+# OPTIONAL gating variant of the PostSync hook.
+#
+# This is NOT in the hooks/ directory on purpose, so the multi-source
+# Application does not apply it by default. Use it INSTEAD of
+# hooks/hello-service-up-postsync.yaml when you want the deploy to FAIL if the
+# smoke test fails: point the second source's `path` at the directory that
+# holds this file, or drop this file into hooks/ and remove the
+# TestWorkflowExecution there.
+#
+# ArgoCD natively tracks Job health, so it waits for this Job to finish and
+# marks the sync failed if the test fails (`testkube run ... -f` exits non-zero
+# on failure). `generateName` + HookSucceeded delete policy gives a fresh,
+# self-cleaning run on every sync.
+#
+# This assumes a self-hosted (OSS / standalone agent) Testkube reachable
+# in-cluster at the API server Service. Adjust TESTKUBE_API_URI to match your
+# install (service name / namespace / port). For Testkube Cloud, replace the
+# TESTKUBE_API_URI env with a `testkube set context --api-key ... --org-id ...
+# --env-id ...` call before the run command.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: hello-service-up-postsync-
+  namespace: testkube
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: run-hello-service-up
+          image: kubeshop/testkube-cli:2.1.19
+          env:
+            - name: TESTKUBE_API_URI
+              value: http://testkube-api-server.testkube.svc.cluster.local:8088
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              testkube run testworkflow hello-service-up -f
