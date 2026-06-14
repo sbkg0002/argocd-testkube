@@ -25,8 +25,8 @@ spec:
           shell: |
               set -eu
 
-              # URL="http://{{ config.service }}:{{ config.port }}"
-              URL=http://zzzzz.com
+              URL="http://{{ config.service }}:{{ config.port }}"
+              # URL=http://zzzzz.com
               echo "==> GET ${URL}"
 
               STATUS=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "${URL}") || {
