@@ -7,8 +7,10 @@
 # the test fails — so a down/unhealthy guestbook Service fails the deploy.
 #
 # generateName -> a fresh, uniquely-named Job per sync (re-runs every time).
-# hook-delete-policy: HookSucceeded -> successful runs are cleaned up; FAILED
-# runs are kept so you can inspect their logs.
+# hook-delete-policy: HookSucceeded,HookFailed -> ArgoCD removes the Job whether
+# it passes or fails, so Jobs don't pile up. The sync is still marked Failed on
+# failure (ArgoCD records the result before deleting). Full run logs live in
+# Testkube (the hello-service-up-N executions), not in the Job.
 #
 # This assumes a self-hosted (OSS / standalone agent) Testkube reachable
 # in-cluster at the API server Service. Adjust TESTKUBE_API_URI to match your

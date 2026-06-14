@@ -1,43 +1,44 @@
 apiVersion: testworkflows.testkube.io/v1
 kind: TestWorkflow
 metadata:
-  name: hello-service-up
-  namespace: testkube
-  labels:
-    app: helm-guestbook
-    check: service
+    name: hello-service-up
+    namespace: testkube
+    labels:
+        app: helm-guestbook
+        check: service
 spec:
-  # Curls the in-cluster Service deployed by the ArgoCD "helm-guestbook" app.
-  #   testkube run testworkflow hello-service-up -f
-  config:
-    service:
-      type: string
-      default: "helm-guestbook.demo.svc.cluster.local"
-    port:
-      type: integer
-      default: 80
+    # Curls the in-cluster Service deployed by the ArgoCD "helm-guestbook" app.
+    #   testkube run testworkflow hello-service-up -f
+    config:
+        service:
+            type: string
+            default: "helm-guestbook.demo.svc.cluster.local"
+        port:
+            type: integer
+            default: 80
 
-  container:
-    image: curlimages/curl:8.8.0
+    container:
+        image: curlimages/curl:8.8.0
 
-  steps:
-    - name: Check the hello service responds
-      shell: |
-        set -eu
+    steps:
+        - name: Check the hello service responds
+          shell: |
+              set -eu
 
-        URL="http://{{ config.service }}:{{ config.port }}"
-        echo "==> GET ${URL}"
+              # URL="http://{{ config.service }}:{{ config.port }}"
+              URL=http://zzzzz.com
+              echo "==> GET ${URL}"
 
-        STATUS=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "${URL}") || {
-          echo "FAIL: could not connect to ${URL}"
-          exit 1
-        }
+              STATUS=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "${URL}") || {
+                echo "FAIL: could not connect to ${URL}"
+                exit 1
+              }
 
-        echo "==> HTTP ${STATUS}"
-        if [ "${STATUS}" = "200" ]; then
-          echo "PASS: ${URL} is up (HTTP ${STATUS})"
-          exit 0
-        fi
+              echo "==> HTTP ${STATUS}"
+              if [ "${STATUS}" = "200" ]; then
+                echo "PASS: ${URL} is up (HTTP ${STATUS})"
+                exit 0
+              fi
 
-        echo "FAIL: expected 200, got ${STATUS}"
-        exit 1
+              echo "FAIL: expected 200, got ${STATUS}"
+              exit 1
